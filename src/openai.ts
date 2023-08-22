@@ -47,12 +47,8 @@ const verifyToken = async (
     }
   }
 
-  if (!token) {
-    return false;
-  }
-
   try {
-    await Jwt.verify(token, secret);
+    await Jwt.verify(token ?? "", secret);
   } catch (e) {
     return false;
   }
