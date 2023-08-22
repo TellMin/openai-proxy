@@ -36,7 +36,6 @@ const verifyToken = async (
   credentials: string,
   secret: string
 ): Promise<boolean> => {
-  const parts = credentials.split(/\s+/);
   let token;
   if (credentials) {
     const parts = credentials.split(/\s+/);
