@@ -1,25 +1,25 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { jwt } from "hono/jwt";
-import { getToken } from "./token";
+import { chat } from "./openai";
+import { cors } from "hono/cors";
 
 type Bindings = {
   OPENAI_API_KEY: string;
   SECRET: string;
 };
+
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.use("*", logger());
 
-app.use("/token/verify/*", (c, next) => {
+app.use("*", (c, next) => {
   const auth = jwt({ secret: c.env.SECRET });
   return auth(c, next);
 });
 
-app.get("/", (c) => c.text("Hello World!"));
+app.use("*", cors());
 
-app.get("/token", async (c) => c.json(await getToken(c.env.SECRET)));
-
-app.get("/token/verify", (c) => c.text("Verified!"));
+app.post("/", async (c) => chat(c.req, c.env.OPENAI_API_KEY));
 
 export default app;
