@@ -27,14 +27,7 @@ export async function chat(
   });
 
   // Convert the response into a friendly text-stream
-  const stream = OpenAIStream(response, {
-    onStart: () => {
-      console.log("Started");
-    },
-    onCompletion: (completion: string) => {
-      console.log(completion);
-    },
-  });
+  const stream = OpenAIStream(response);
   // Respond with the stream
   return new StreamingTextResponse(stream);
 }
