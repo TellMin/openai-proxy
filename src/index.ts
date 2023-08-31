@@ -16,35 +16,32 @@ app.use("*", logger());
 
 app.use("*", cors());
 
-app.post(
+app.use(
   "/",
-
   async (
     c: Context<{
       Bindings: Bindings;
     }>,
     next: Next
-  ) => {
-    return jwt({ secret: c.env.SECRET })(c, next);
-  },
-
-  async (c) => {
-    const openai = new OpenAI({ apiKey: c.env.OPENAI_API_KEY });
-    const { messages } = await c.req.json();
-
-    // Ask OpenAI for a streaming chat completion given the prompt
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      stream: true,
-      messages,
-    });
-
-    // Convert the response into a friendly text-stream
-    const stream = OpenAIStream(response);
-    // Respond with the stream
-    return new StreamingTextResponse(stream);
-  }
+  ) => jwt({ secret: c.env.SECRET })(c, next)
 );
+
+app.post("/", async (c) => {
+  const openai = new OpenAI({ apiKey: c.env.OPENAI_API_KEY });
+  const { messages } = await c.req.json();
+
+  // Ask OpenAI for a streaming chat completion given the prompt
+  const response = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo",
+    stream: true,
+    messages,
+  });
+
+  // Convert the response into a friendly text-stream
+  const stream = OpenAIStream(response);
+  // Respond with the stream
+  return new StreamingTextResponse(stream);
+});
 
 app.options("*", (c) => {
   return new Response(null, {
