@@ -2,7 +2,6 @@ import { Context, Hono, Next } from "hono";
 import { logger } from "hono/logger";
 import { cors } from "hono/cors";
 import { jwt } from "hono/jwt";
-import { OpenAIStream, StreamingTextResponse } from "ai";
 import OpenAI from "openai";
 
 type Bindings = {
@@ -31,16 +30,17 @@ app.post("/", async (c) => {
   const { messages } = await c.req.json();
 
   // Ask OpenAI for a streaming chat completion given the prompt
-  const response = await openai.chat.completions.create({
+  const chatStream = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
     stream: true,
     messages,
   });
 
-  // Convert the response into a friendly text-stream
-  const stream = OpenAIStream(response);
-  // Respond with the stream
-  return new StreamingTextResponse(stream);
+  return c.streamText(async (stream) => {
+    for await (const message of chatStream) {
+      await stream.write(message.choices[0]?.delta.content ?? "");
+    }
+  });
 });
 
 app.options("*", (c) => {
