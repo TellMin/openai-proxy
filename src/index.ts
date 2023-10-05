@@ -18,7 +18,7 @@ app.use("*", logger());
 app.use("*", cors());
 
 app.use(
-  "/",
+  "/*",
   async (
     c: Context<{
       Bindings: Bindings;
@@ -45,7 +45,7 @@ app.post("/", async (c) => {
   });
 });
 
-app.post("/function-cllindg", async (c) => {
+app.post("/function", async (c) => {
   const openai = new OpenAI({ apiKey: c.env.OPENAI_API_KEY });
   const { messages, functions } = await c.req.json();
 
