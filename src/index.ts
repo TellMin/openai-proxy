@@ -3,7 +3,8 @@ import { logger } from "hono/logger";
 import { cors } from "hono/cors";
 import { jwt } from "hono/jwt";
 import OpenAI from "openai";
-import { prettyJSON } from "hono/pretty-json";
+import { ChatCompletionMessage } from "openai/resources/chat";
+import { messageReducer } from "./lib/reducer";
 
 type Bindings = {
   OPENAI_API_KEY: string;
@@ -44,43 +45,46 @@ app.post("/", async (c) => {
   });
 });
 
-app.get("/function", async (c) => {
+app.post("/function-cllindg", async (c) => {
   const openai = new OpenAI({ apiKey: c.env.OPENAI_API_KEY });
-
-  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    {
-      content: "I am a highly intelligent question answering bot.",
-      role: "assistant",
-    },
-    {
-      content: "Tell me tomorrow's weather. Today is 2021-10-13.",
-      role: "user",
-    },
-  ];
-
-  const functions: OpenAI.Chat.Completions.ChatCompletionCreateParams.Function[] =
-    [
-      {
-        name: "tomorrows_weather",
-        description: "Get tomorrow's weather",
-        parameters: {
-          type: "object",
-          properties: {
-            date: { type: "string" },
-          },
-        },
-      },
-    ];
+  const { messages, functions } = await c.req.json();
 
   // Ask OpenAI for a streaming chat completion given the prompt
-  const completion = await openai.chat.completions.create({
+  const chatStream = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
     messages,
+    stream: true,
     functions: functions,
+    function_call: "auto",
   });
 
-  const message = completion.choices[0]?.message;
-  return c.json(message);
+  let message = {} as ChatCompletionMessage;
+  let isFunctionCallDetected = false;
+
+  return c.streamText(async (stream) => {
+    for await (const chunk of chatStream) {
+      const choice = chunk.choices[0];
+      const finish_reason = choice?.finish_reason;
+
+      // Set the flag when function_call is detected
+      if (finish_reason === "function_call" && !isFunctionCallDetected) {
+        isFunctionCallDetected = true;
+      }
+
+      // Aggregate the message
+      message = messageReducer(message, chunk);
+
+      // Write delta_content to the stream only if function_call has not been detected yet
+      if (!isFunctionCallDetected) {
+        const delta_content = choice?.delta.content ?? "";
+        await stream.write(delta_content);
+      }
+    }
+
+    if (isFunctionCallDetected) {
+      stream.write(JSON.stringify(message.function_call));
+    }
+  });
 });
 
 app.options("*", (c) => {
