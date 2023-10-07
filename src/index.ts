@@ -3,8 +3,7 @@ import { logger } from "hono/logger";
 import { cors } from "hono/cors";
 import { jwt } from "hono/jwt";
 import OpenAI from "openai";
-import { ChatCompletionMessage } from "openai/resources/chat";
-import { messageReducer } from "./lib/reducer";
+import { OpenAIStream, StreamingTextResponse } from "ai";
 
 type Bindings = {
   OPENAI_API_KEY: string;
@@ -32,59 +31,33 @@ app.post("/", async (c) => {
   const { messages } = await c.req.json();
 
   // Ask OpenAI for a streaming chat completion given the prompt
-  const chatStream = await openai.chat.completions.create({
+  const response = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
     stream: true,
     messages,
   });
 
-  return c.streamText(async (stream) => {
-    for await (const message of chatStream) {
-      await stream.write(message.choices[0]?.delta.content ?? "");
-    }
-  });
+  const stream = OpenAIStream(response);
+  return new StreamingTextResponse(stream);
 });
 
-app.post("/function", async (c) => {
+app.post("/functions", async (c) => {
   const openai = new OpenAI({ apiKey: c.env.OPENAI_API_KEY });
-  const { messages, functions } = await c.req.json();
+  const { messages, function_call, functions } = await c.req.json();
+
+  console.log(messages, functions, function_call);
 
   // Ask OpenAI for a streaming chat completion given the prompt
-  const chatStream = await openai.chat.completions.create({
+  const response = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
     messages,
     stream: true,
-    functions: functions,
-    function_call: "auto",
+    functions,
+    function_call,
   });
 
-  let message = {} as ChatCompletionMessage;
-  let isFunctionCallDetected = false;
-
-  return c.streamText(async (stream) => {
-    for await (const chunk of chatStream) {
-      const choice = chunk.choices[0];
-      const finish_reason = choice?.finish_reason;
-
-      // Set the flag when function_call is detected
-      if (finish_reason === "function_call" && !isFunctionCallDetected) {
-        isFunctionCallDetected = true;
-      }
-
-      // Aggregate the message
-      message = messageReducer(message, chunk);
-
-      // Write delta_content to the stream only if function_call has not been detected yet
-      if (!isFunctionCallDetected) {
-        const delta_content = choice?.delta.content ?? "";
-        await stream.write(delta_content);
-      }
-    }
-
-    if (isFunctionCallDetected) {
-      stream.write(JSON.stringify(message.function_call));
-    }
-  });
+  const stream = OpenAIStream(response);
+  return new StreamingTextResponse(stream);
 });
 
 app.options("*", (c) => {
